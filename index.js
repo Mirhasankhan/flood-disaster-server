@@ -179,25 +179,88 @@ async function run() {
       res.send(result);
     });
 
-    app.put("/api/v1/approve/:id", async (req, res) => {
+    // app.put("/api/v1/approve/:id", async (req, res) => {
+    //   try {
+    //     const { id } = req.params;
+    //     const { isApproved } = req.body;
+
+    //     if (!ObjectId.isValid(id))
+    //       return res.status(400).json({ error: "Invalid ID format" });
+
+    //     const filter = { _id: new ObjectId(id) };
+    //     const update = { $set: { isApproved } };
+
+    //     const result = await applyCollection.updateOne(filter, update);
+
+    //     if (result.modifiedCount === 0)
+    //       return res.status(404).json({ error: "Supply not found" });
+
+    //     res.json({ message: "Supply status updated successfully" });
+    //   } catch (error) {
+    //     console.error("Error updating supply status:", error);
+    //     res.status(500).json({ error: "Internal server error" });
+    //   }
+    // });
+    app.put("/api/v1/approve/:applyId/:supplyId", async (req, res) => {
       try {
-        const { id } = req.params;
+        const { applyId, supplyId } = req.params;
         const { isApproved } = req.body;
 
-        if (!ObjectId.isValid(id))
+        if (!ObjectId.isValid(applyId) || !ObjectId.isValid(supplyId))
           return res.status(400).json({ error: "Invalid ID format" });
 
-        const filter = { _id: new ObjectId(id) };
+        const applyFilter = { _id: new ObjectId(applyId) };
+        const supplyFilter = { _id: new ObjectId(supplyId) };
         const update = { $set: { isApproved } };
 
-        const result = await applyCollection.updateOne(filter, update);
+        // Update the current collection
+        const applyResult = await applyCollection.updateOne(
+          applyFilter,
+          update
+        );
 
-        if (result.modifiedCount === 0)
+        // Update the supplyCollection
+        const supplyResult = await supplyCollection.updateOne(
+          supplyFilter,
+          update
+        );
+
+        // Check if either document was not found
+        if (applyResult.modifiedCount === 0 && supplyResult.modifiedCount === 0)
           return res.status(404).json({ error: "Supply not found" });
 
         res.json({ message: "Supply status updated successfully" });
       } catch (error) {
         console.error("Error updating supply status:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    });
+
+    app.get("/api/v1/leaderboard", async (req, res) => {
+      try {
+        const allSupplies = await supplyCollection.find({}).toArray();
+
+        const leaderboardData = {};
+
+        allSupplies.forEach((supply) => {
+          const { email, name } = supply;
+          if (!leaderboardData[email]) {
+            leaderboardData[email] = { frequency: 0, name };
+          }
+          leaderboardData[email].frequency++;
+        });
+
+        const leaderboardArray = Object.keys(leaderboardData).map((email) => ({
+          email,
+          name: leaderboardData[email].name,
+          frequency: leaderboardData[email].frequency,
+        }));
+
+        leaderboardArray.sort((a, b) => b.frequency - a.frequency);
+
+        res.json(leaderboardArray);
+      } catch (error) {
+        console.error("Error getting leaderboard:", error);
         res.status(500).json({ error: "Internal server error" });
       }
     });
