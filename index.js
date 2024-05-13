@@ -29,6 +29,7 @@ async function run() {
     const usersCollection = db.collection("users");
     const supplyCollection = db.collection("supply");
     const applyCollection = db.collection("applications");
+    const reviewsCollection = db.collection("reviews");
 
     // User Registration
     app.post("/api/v1/register", async (req, res) => {
@@ -97,6 +98,25 @@ async function run() {
       }
       const result = await usersCollection.find(query).toArray();
       res.send(result);
+    });
+
+    app.put("/api/v1/users/:email/updateRole", async (req, res) => {
+      try {
+        const { email } = req.params;
+        const { role } = req.body;
+        const filter = { email: email };
+        const update = { $set: { role } };
+
+        const result = await usersCollection.updateOne(filter, update);
+
+        if (result.modifiedCount === 0)
+          return res.status(404).json({ error: "User not found" });
+
+        res.json({ message: "User role updated successfully" });
+      } catch (error) {
+        console.error("Error updating user role:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
     });
 
     app.post("/api/v1/addSupply", async (req, res) => {
@@ -171,6 +191,10 @@ async function run() {
       const result = await applyCollection.find(query).toArray();
       res.send(result);
     });
+    app.get("/api/v1/reviews", async (req, res) => {
+      const result = await reviewsCollection.find().toArray();
+      res.send(result);
+    });
 
     app.delete("/api/v1/deny/:id", async (req, res) => {
       const id = req.params.id;
@@ -179,28 +203,6 @@ async function run() {
       res.send(result);
     });
 
-    // app.put("/api/v1/approve/:id", async (req, res) => {
-    //   try {
-    //     const { id } = req.params;
-    //     const { isApproved } = req.body;
-
-    //     if (!ObjectId.isValid(id))
-    //       return res.status(400).json({ error: "Invalid ID format" });
-
-    //     const filter = { _id: new ObjectId(id) };
-    //     const update = { $set: { isApproved } };
-
-    //     const result = await applyCollection.updateOne(filter, update);
-
-    //     if (result.modifiedCount === 0)
-    //       return res.status(404).json({ error: "Supply not found" });
-
-    //     res.json({ message: "Supply status updated successfully" });
-    //   } catch (error) {
-    //     console.error("Error updating supply status:", error);
-    //     res.status(500).json({ error: "Internal server error" });
-    //   }
-    // });
     app.put("/api/v1/approve/:applyId/:supplyId", async (req, res) => {
       try {
         const { applyId, supplyId } = req.params;
@@ -263,6 +265,15 @@ async function run() {
         console.error("Error getting leaderboard:", error);
         res.status(500).json({ error: "Internal server error" });
       }
+    });
+
+    app.post("/api/v1/addReview", async (req, res) => {
+      const body = req.body;
+      await reviewsCollection.insertOne(body);
+      res.status(201).json({
+        success: true,
+        message: "Review Posted successfully",
+      });
     });
 
     // Start the server
