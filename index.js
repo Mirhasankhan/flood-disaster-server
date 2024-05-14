@@ -31,6 +31,7 @@ async function run() {
     const applyCollection = db.collection("applications");
     const reviewsCollection = db.collection("reviews");
     const testimonialsCollection = db.collection("testimonials");
+    const volunteerCollection = db.collection("volunteer");
 
     // User Registration
     app.post("/api/v1/register", async (req, res) => {
@@ -289,6 +290,20 @@ async function run() {
       res.status(201).json({
         success: true,
         message: "Testimonial Posted successfully",
+      });
+    });
+
+    app.get("/api/v1/volunteers", async (req, res) => {
+      const result = await volunteerCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.post("/api/v1/volunteer", async (req, res) => {
+      const body = req.body;
+      await volunteerCollection.insertOne(body);
+      res.status(201).json({
+        success: true,
+        message: "Volunteer Added successfully",
       });
     });
 
