@@ -4,6 +4,7 @@ const bcrypt = require("bcrypt");
 const { MongoClient, ObjectId } = require("mongodb");
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
+const stripe = require("stripe")(process.env.PAYMENT_SECRET_KEY);
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -27,11 +28,12 @@ async function run() {
 
     const db = client.db("floodDisaster");
     const usersCollection = db.collection("users");
-    const supplyCollection = db.collection("supply");
-    const applyCollection = db.collection("applications");
+    const campainCollection = db.collection("campain");
+    const donationCollection = db.collection("donations");
     const reviewsCollection = db.collection("reviews");
     const testimonialsCollection = db.collection("testimonials");
     const volunteerCollection = db.collection("volunteer");
+    const commentsCollection = db.collection("comments");
 
     // User Registration
     app.post("/api/v1/register", async (req, res) => {
@@ -90,6 +92,7 @@ async function run() {
         email: req.body.email,
         token,
         role: user.role,
+        name: user.name,
       });
     });
 
@@ -121,162 +124,117 @@ async function run() {
       }
     });
 
-    app.post("/api/v1/addSupply", async (req, res) => {
+    app.post("/api/v1/addCampain", async (req, res) => {
       const body = req.body;
-      await supplyCollection.insertOne(body);
+      await campainCollection.insertOne(body);
       res.status(201).json({
         success: true,
-        message: "supply posted successfully",
+        message: "campain posted successfully",
       });
     });
 
-    app.get("/api/v1/supplies", async (req, res) => {
+    app.get("/api/v1/campains", async (req, res) => {
       let query = {};
       if (req.query?.email) {
         query = { email: req.query.email };
       }
-      const result = await supplyCollection.find(query).toArray();
+      const result = await campainCollection.find(query).toArray();
       res.send(result);
     });
-    app.get("/api/v1/supplies/:id", async (req, res) => {
+    app.get("/api/v1/campains/:id", async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
-      const result = await supplyCollection.find(filter).toArray();
+      const result = await campainCollection.find(filter).toArray();
       res.send(result);
     });
 
-    app.put("/api/v1/supplies/:id", async (req, res) => {
+    app.put("/api/v1/campains/:id", async (req, res) => {
       try {
         const { id } = req.params;
-        const { isApplied } = req.body;
+        const { newAmount } = req.body;
 
         if (!ObjectId.isValid(id))
           return res.status(400).json({ error: "Invalid ID format" });
+        if (typeof newAmount !== "number" || newAmount <= 0)
+          return res.status(400).json({ error: "Invalid newAmount value" });
 
         const filter = { _id: new ObjectId(id) };
-        const update = { $set: { isApplied } };
 
-        const result = await supplyCollection.updateOne(filter, update);
+        // Find the current collectedAmount
+        const campain = await campainCollection.findOne(filter);
+        if (!campain)
+          return res.status(404).json({ error: "Campain not found" });
+
+        const updatedAmount =
+          (Number(campain.collectedAmount) || 0) + newAmount;
+
+        const update = { $set: { collectedAmount: updatedAmount } };
+        const result = await campainCollection.updateOne(filter, update);
 
         if (result.modifiedCount === 0)
-          return res.status(404).json({ error: "Supply not found" });
+          return res
+            .status(404)
+            .json({ error: "Failed to update collectedAmount" });
 
-        res.json({ message: "Supply status updated successfully" });
+        res.json({
+          message: "Donation successful",
+          collectedAmount: updatedAmount,
+        });
       } catch (error) {
-        console.error("Error updating supply status:", error);
+        console.error("Error updating campain collectedAmount:", error);
         res.status(500).json({ error: "Internal server error" });
       }
     });
 
-    app.delete("/api/v1/supplies/:id", async (req, res) => {
+    app.delete("/api/v1/campains/:id", async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) };
-      const result = supplyCollection.deleteOne(filter);
+      const result = campainCollection.deleteOne(filter);
       res.send(result);
     });
 
-    //applications api
-    app.post("/api/v1/addApply", async (req, res) => {
+    //donations api
+    app.post("/api/v1/donate", async (req, res) => {
       const body = req.body;
-      await applyCollection.insertOne(body);
+      await donationCollection.insertOne(body);
       res.status(201).json({
         success: true,
-        message: "applied successfully",
+        message: "Donated successfully",
       });
-    });
-
-    app.get("/api/v1/applies", async (req, res) => {
-      let query = {};
-      if (req.query?.email) {
-        query = { email: req.query.email };
-      }
-      const result = await applyCollection.find(query).toArray();
-      res.send(result);
-    });
-    app.get("/api/v1/reviews", async (req, res) => {
-      const result = await reviewsCollection.find().toArray();
-      res.send(result);
-    });
-
-    app.delete("/api/v1/deny/:id", async (req, res) => {
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
-      const result = applyCollection.deleteOne(filter);
-      res.send(result);
-    });
-
-    app.put("/api/v1/approve/:applyId/:supplyId", async (req, res) => {
-      try {
-        const { applyId, supplyId } = req.params;
-        const { isApproved } = req.body;
-
-        if (!ObjectId.isValid(applyId) || !ObjectId.isValid(supplyId))
-          return res.status(400).json({ error: "Invalid ID format" });
-
-        const applyFilter = { _id: new ObjectId(applyId) };
-        const supplyFilter = { _id: new ObjectId(supplyId) };
-        const update = { $set: { isApproved } };
-
-        // Update the current collection
-        const applyResult = await applyCollection.updateOne(
-          applyFilter,
-          update
-        );
-
-        // Update the supplyCollection
-        const supplyResult = await supplyCollection.updateOne(
-          supplyFilter,
-          update
-        );
-
-        // Check if either document was not found
-        if (applyResult.modifiedCount === 0 && supplyResult.modifiedCount === 0)
-          return res.status(404).json({ error: "Supply not found" });
-
-        res.json({ message: "Supply status updated successfully" });
-      } catch (error) {
-        console.error("Error updating supply status:", error);
-        res.status(500).json({ error: "Internal server error" });
-      }
     });
 
     app.get("/api/v1/leaderboard", async (req, res) => {
       try {
-        const allSupplies = await supplyCollection.find({}).toArray();
+        const leaderboard = await donationCollection
+          .aggregate([
+            {
+              $group: {
+                _id: "$email",
+                totalAmount: { $sum: "$amount" },
+                name: { $first: "$name" },
+              },
+            },
+            {
+              $sort: { totalAmount: -1 },
+            },
+          ])
+          .toArray();
 
-        const leaderboardData = {};
-
-        allSupplies.forEach((supply) => {
-          const { email, name } = supply;
-          if (!leaderboardData[email]) {
-            leaderboardData[email] = { frequency: 0, name };
-          }
-          leaderboardData[email].frequency++;
-        });
-
-        const leaderboardArray = Object.keys(leaderboardData).map((email) => ({
-          email,
-          name: leaderboardData[email].name,
-          frequency: leaderboardData[email].frequency,
-        }));
-
-        leaderboardArray.sort((a, b) => b.frequency - a.frequency);
-
-        res.json(leaderboardArray);
+        res.json({ leaderboard });
       } catch (error) {
-        console.error("Error getting leaderboard:", error);
+        console.error("Error generating leaderboard:", error);
         res.status(500).json({ error: "Internal server error" });
       }
     });
 
-    app.post("/api/v1/addReview", async (req, res) => {
-      const body = req.body;
-      await reviewsCollection.insertOne(body);
-      res.status(201).json({
-        success: true,
-        message: "Review Posted successfully",
-      });
-    });
+    // app.get("/api/v1/donations", async (req, res) => {
+    //   let query = {};
+    //   if (req.query?.email) {
+    //     query = { email: req.query.email };
+    //   }
+    //   const result = await donationCollection.find(query).toArray();
+    //   res.send(result);
+    // });
 
     //donor testimonial
     app.get("/api/v1/testimonials", async (req, res) => {
@@ -300,10 +258,47 @@ async function run() {
 
     app.post("/api/v1/volunteer", async (req, res) => {
       const body = req.body;
+      const email = body.email;
+      const existing = await volunteerCollection.findOne({ email });
+      if (existing) {
+        return res.status(400).json({
+          success: false,
+          message: "Volunteer already exists",
+        });
+      }
+
       await volunteerCollection.insertOne(body);
       res.status(201).json({
         success: true,
         message: "Volunteer Added successfully",
+      });
+    });
+
+    app.get("/api/v1/allComments", async (req, res) => {
+      const result = await commentsCollection.find().toArray();
+      res.send(result);
+    });
+
+    app.post("/api/v1/addComment", async (req, res) => {
+      const body = req.body;
+
+      await commentsCollection.insertOne(body);
+      res.status(201).json({
+        success: true,
+        message: "Comment Added successfully",
+      });
+    });
+
+    app.post("/api/v1/create-payment-intent", async (req, res) => {
+      const { price } = req.body;
+      const amount = parseInt(price * 100);
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+      res.send({
+        clientSecret: paymentIntent.client_secret,
       });
     });
 
