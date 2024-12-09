@@ -30,10 +30,9 @@ async function run() {
     const usersCollection = db.collection("users");
     const campainCollection = db.collection("campain");
     const donationCollection = db.collection("donations");
-    const reviewsCollection = db.collection("reviews");
     const testimonialsCollection = db.collection("testimonials");
     const volunteerCollection = db.collection("volunteer");
-    const commentsCollection = db.collection("comments");
+    const newsCollection = db.collection("news");
 
     // User Registration
     app.post("/api/v1/register", async (req, res) => {
@@ -274,18 +273,17 @@ async function run() {
       });
     });
 
-    app.get("/api/v1/allComments", async (req, res) => {
-      const result = await commentsCollection.find().toArray();
+    app.get("/api/v1/allNews", async (req, res) => {
+      const result = await newsCollection.find().toArray();
       res.send(result);
     });
 
-    app.post("/api/v1/addComment", async (req, res) => {
+    app.post("/api/v1/addNews", async (req, res) => {
       const body = req.body;
-
-      await commentsCollection.insertOne(body);
+      await newsCollection.insertOne(body);
       res.status(201).json({
         success: true,
-        message: "Comment Added successfully",
+        message: "News Added successfully",
       });
     });
 
