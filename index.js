@@ -226,14 +226,14 @@ async function run() {
       }
     });
 
-    // app.get("/api/v1/donations", async (req, res) => {
-    //   let query = {};
-    //   if (req.query?.email) {
-    //     query = { email: req.query.email };
-    //   }
-    //   const result = await donationCollection.find(query).toArray();
-    //   res.send(result);
-    // });
+    app.get("/api/v1/donations", async (req, res) => {
+      let query = {};
+      if (req.query?.email) {
+        query = { email: req.query.email };
+      }
+      const result = await donationCollection.find(query).toArray();
+      res.send(result);
+    });
 
     //donor testimonial
     app.get("/api/v1/testimonials", async (req, res) => {
